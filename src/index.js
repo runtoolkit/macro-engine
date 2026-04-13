@@ -16,8 +16,7 @@ export { Config } from './config.js';
 export { RateLimit } from './rate-limit.js';
 export { Logger, LogLevel } from './log.js';
 export { CommandSystem, CommandRegistry, SingleCommandRunner, MultiCommandRunner, tokenizeCommandLine, normalizeCommand } from './command.js';
-export { splitScript, parseScript } from './script.js';
-export { MiddlewareStack } from './middleware.js';
+export { splitScript, ScriptRunner } from './script.js';
 
 export * as math from './math.js';
 export * as str from './string.js';
@@ -36,6 +35,7 @@ import { Config } from './config.js';
 import { RateLimit } from './rate-limit.js';
 import { Logger } from './log.js';
 import { CommandSystem } from './command.js';
+import { ScriptRunner } from './script.js';
 
 export class Engine {
   constructor({ msPerTick = 50, debug = false } = {}) {
@@ -52,6 +52,7 @@ export class Engine {
     this.config = new Config();
     this.rateLimit = new RateLimit();
     this.commands = new CommandSystem();
+    this.script = new ScriptRunner(this.commands);
     this.log = new Logger({ minLevel: debug ? 0 : 1 });
 
     if (debug) {

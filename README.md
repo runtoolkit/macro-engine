@@ -1,28 +1,39 @@
 # macro-engine
 
-A modular JS runtime engine for safe, extensible command execution and general-purpose automation.
+A modular JavaScript runtime engine with tick pipelines, events, hooks, fibers, scheduling, rate limiting, and secure command execution.
 
-## Features
+## Highlights
 
-- Tick loop and scheduling
-- Event bus and hooks
-- Queue and batch helpers
-- Safe command registry
-- Single and multi-command execution
-- Script parsing
-- Middleware pipeline
-- Rate limiting and structured logging
+- Safe command execution without `eval`
+- Single and multi-command runners
+- Script splitting for `;` and newline separated command chains
+- Optional permissions and timeouts per command
+- Prototype-pollution resistant context cloning
+- Concurrency-aware parallel execution
 
-## Usage
+## Quick start
 
 ```js
-import { CommandSystem } from 'macro-engine';
+import { Engine } from 'macro-engine';
 
-const engine = new CommandSystem({ timeoutMs: 1000 });
+const engine = new Engine();
 
-engine.register('say', ({ args }) => {
-  console.log(args.join(' '));
-});
+engine.commands.register('echo', ({ args }) => args.join(' '));
 
-await engine.runScript('say Hello; say World');
+await engine.commands.run('echo hello world');
+await engine.commands.runScript(`
+  echo first;
+  echo second
+`);
 ```
+
+## Security notes
+
+- No shell execution
+- No string-to-code evaluation
+- Dangerous object keys are filtered during cloning
+- Cyclic objects are handled safely during cloning
+
+## Versioning
+
+Current version: `1.0.5`

@@ -1,36 +1,96 @@
 /**
  * CommandSystem — safe, general-purpose single and multi command execution.
  *
- * No eval, no shell execution, no platform-specific dependency.
- * Commands are registered functions; strings are parsed as command lines.
+ * Security goals:
+ * - No eval / no shell execution
+ * - Prototype-pollution resistant cloning
+ * - Optional permissions / timeout checks
+ * - Concurrency-aware multi command runner
  */
 
-import { parseScript, splitScript } from './script.js';
-import { MiddlewareStack } from './middleware.js';
+import { splitScript } from './script.js';
 
 const DEFAULT_MODE = 'series';
+const DANGEROUS_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 
-function cloneValue(value) {
-  if (value == null || typeof value !== 'object') return value;
-  if (Array.isArray(value)) return value.map(cloneValue);
-  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, cloneValue(v)]));
+function isPlainObject(value) {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
 }
 
-function withTimeout(promise, timeoutMs, label = 'command') {
-  const ms = Number(timeoutMs) || 0;
-  if (ms <= 0) return Promise.resolve(promise);
+function cloneValue(value, seen = new WeakMap()) {
+  if (value == null || typeof value !== 'object') return value;
+  if (seen.has(value)) return seen.get(value);
 
-  let timerId;
-  const timeout = new Promise((_, reject) => {
-    timerId = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-  });
+  if (Array.isArray(value)) {
+    const out = [];
+    seen.set(value, out);
+    for (const item of value) out.push(cloneValue(item, seen));
+    return out;
+  }
 
-  return Promise.race([Promise.resolve(promise), timeout]).finally(() => clearTimeout(timerId));
+  if (!isPlainObject(value)) return value;
+
+  const out = Object.create(null);
+  seen.set(value, out);
+  for (const [key, nested] of Object.entries(value)) {
+    if (DANGEROUS_KEYS.has(key)) continue;
+    out[key] = cloneValue(nested, seen);
+  }
+  return out;
+}
+
+function safeAssign(target, source) {
+  if (!source || typeof source !== 'object') return target;
+  for (const [key, value] of Object.entries(source)) {
+    if (DANGEROUS_KEYS.has(key)) continue;
+    target[key] = value;
+  }
+  return target;
+}
+
+function normalizePermissionSet(value) {
+  if (value == null) return new Set();
+  if (value instanceof Set) return new Set([...value].map(String).map((item) => item.trim()).filter(Boolean));
+  if (Array.isArray(value)) return new Set(value.map(String).map((item) => item.trim()).filter(Boolean));
+  if (typeof value === 'string') return new Set(value.split(/[,\s]+/).map((item) => item.trim()).filter(Boolean));
+  return new Set();
+}
+
+function normalizeRequires(value) {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+  if (value instanceof Set) return [...value].map(String).map((item) => item.trim()).filter(Boolean);
+  if (typeof value === 'string') return value.split(/[,\s]+/).map((item) => item.trim()).filter(Boolean);
+  return [String(value).trim()].filter(Boolean);
+}
+
+function timeoutError(ms, name = 'Command') {
+  const error = new Error(`${name} timed out after ${ms}ms`);
+  error.name = 'TimeoutError';
+  error.code = 'ETIMEDOUT';
+  error.timeoutMs = ms;
+  return error;
+}
+
+async function withTimeout(task, ms, name) {
+  if (!Number.isFinite(ms) || ms <= 0) return task;
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve(task),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(timeoutError(ms, name)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export function tokenizeCommandLine(input) {
   if (typeof input !== 'string') throw new TypeError('Command line must be a string');
-
   const tokens = [];
   let current = '';
   let quote = null;
@@ -80,29 +140,24 @@ export function normalizeCommand(input) {
   }
 
   if (typeof input === 'string') {
-    const scriptParts = splitScript(input);
-    if (scriptParts.length > 1) {
-      return { kind: 'batch', items: scriptParts };
-    }
-
-    const [name = '', ...args] = tokenizeCommandLine(scriptParts[0] ?? input);
+    const [name = '', ...args] = tokenizeCommandLine(input);
     return { kind: 'command', name, args, raw: input };
   }
 
   if (Array.isArray(input)) {
-    return { kind: 'batch', items: input };
+    return { kind: 'batch', items: input.map((item) => cloneValue(item)) };
   }
 
   if (input && typeof input === 'object') {
     const name = input.name ?? input.cmd ?? input.command ?? '';
-    const args = Array.isArray(input.args)
-      ? [...input.args]
-      : input.args == null ? [] : [input.args];
+    const contextSource = input.context ?? input.ctx ?? null;
     return {
       kind: input.kind ?? (name ? 'command' : 'object'),
       name,
-      args,
-      context: input.context ?? input.ctx ?? null,
+      args: Array.isArray(input.args)
+        ? input.args.map((arg) => cloneValue(arg))
+        : input.args == null ? [] : [cloneValue(input.args)],
+      context: contextSource && typeof contextSource === 'object' ? cloneValue(contextSource) : null,
       meta: input.meta ? cloneValue(input.meta) : undefined,
       raw: input,
     };
@@ -115,11 +170,18 @@ export class CommandRegistry {
   #commands = new Map();
   #aliases = new Map();
 
-  register(name, handler, { aliases = [], description = '', meta = {} } = {}) {
+  register(name, handler, { aliases = [], description = '', meta = {}, requires = [], timeoutMs = 0 } = {}) {
     if (typeof name !== 'string' || !name.trim()) throw new TypeError('Command name must be a non-empty string');
     if (typeof handler !== 'function') throw new TypeError(`Handler for command "${name}" must be a function`);
 
-    const record = { name, handler, description, meta: cloneValue(meta) };
+    const record = {
+      name,
+      handler,
+      description,
+      meta: cloneValue(meta),
+      requires: normalizeRequires(requires),
+      timeoutMs: Math.max(0, Number(timeoutMs) || 0),
+    };
     this.#commands.set(name, record);
 
     for (const alias of aliases) {
@@ -138,6 +200,7 @@ export class CommandRegistry {
   }
 
   resolve(name) {
+    if (typeof name !== 'string' || !name.trim()) return null;
     return this.#commands.get(this.#aliases.get(name) ?? name) ?? null;
   }
 
@@ -146,42 +209,45 @@ export class CommandRegistry {
   }
 
   list() {
-    return [...this.#commands.values()].map(({ name, description, meta }) => ({
+    return [...this.#commands.values()].map(({ name, description, meta, requires, timeoutMs }) => ({
       name,
       description,
       meta: cloneValue(meta),
+      requires: [...requires],
+      timeoutMs,
     }));
   }
 }
 
 export class SingleCommandRunner {
-  constructor(registry, { allowUnknown = false, timeoutMs = 0 } = {}) {
+  constructor(registry, { allowUnknown = false } = {}) {
     if (!(registry instanceof CommandRegistry)) throw new TypeError('SingleCommandRunner requires a CommandRegistry');
     this.registry = registry;
     this.allowUnknown = allowUnknown;
-    this.timeoutMs = Math.max(0, Number(timeoutMs) || 0);
   }
 
   async run(input, context = {}, options = {}) {
     const normalized = normalizeCommand(input);
     const startedAt = Date.now();
-    const timeoutMs = Math.max(0, Number(options.timeoutMs ?? context.timeoutMs ?? this.timeoutMs) || 0);
 
     try {
       if (normalized.kind === 'batch') {
-        const batch = new MultiCommandRunner(this.registry, {
-          mode: 'series',
-          timeoutMs,
-          allowUnknown: options.allowUnknown ?? this.allowUnknown,
-        });
+        const batch = new MultiCommandRunner(this.registry, options);
         return await batch.run(normalized.items, context, options);
       }
 
       if (normalized.kind === 'function') {
+        const commandContext = Object.create(null);
+        safeAssign(commandContext, cloneValue(context));
+        if (normalized.context) safeAssign(commandContext, normalized.context);
+        commandContext.command = normalized;
+        commandContext.registry = this.registry;
+
+        const timeoutMs = Math.max(0, Number(options.timeoutMs ?? context.timeoutMs ?? 0) || 0);
         const value = await withTimeout(
-          normalized.fn({ ...cloneValue(context), command: normalized }),
+          normalized.fn(commandContext),
           timeoutMs,
-          'function command',
+          'Inline command',
         );
         return { ok: true, value, command: normalized, durationMs: Date.now() - startedAt };
       }
@@ -189,26 +255,34 @@ export class SingleCommandRunner {
       const name = normalized.name;
       const record = this.registry.resolve(name);
       if (!record) {
-        if (this.allowUnknown || options.allowUnknown) {
+        if (this.allowUnknown) {
           return { ok: true, skipped: true, command: normalized, durationMs: Date.now() - startedAt };
         }
         throw new Error(`Unknown command: ${name}`);
       }
 
-      const commandContext = {
-        ...cloneValue(context),
-        args: normalized.args,
-        command: normalized,
-        registry: this.registry,
-      };
-      if (normalized.context && typeof normalized.context === 'object') {
-        Object.assign(commandContext, cloneValue(normalized.context));
+      const commandContext = Object.create(null);
+      safeAssign(commandContext, cloneValue(context));
+      if (normalized.context) safeAssign(commandContext, normalized.context);
+      commandContext.args = normalized.args;
+      commandContext.command = normalized;
+      commandContext.registry = this.registry;
+
+      const required = record.requires;
+      const granted = normalizePermissionSet(commandContext.permissions ?? commandContext.scopes ?? commandContext.roles);
+      const missing = required.filter((permission) => !granted.has(permission));
+      if (missing.length > 0) {
+        const error = new Error(`Permission denied for command: ${name}`);
+        error.code = 'EACCES';
+        error.missingPermissions = missing;
+        throw error;
       }
 
+      const timeoutMs = Math.max(0, Number(options.timeoutMs ?? context.timeoutMs ?? record.timeoutMs ?? 0) || 0);
       const value = await withTimeout(
         record.handler(commandContext),
         timeoutMs,
-        `command "${name}"`,
+        `Command "${name}"`,
       );
       return { ok: true, value, command: normalized, durationMs: Date.now() - startedAt };
     } catch (error) {
@@ -218,27 +292,47 @@ export class SingleCommandRunner {
 }
 
 export class MultiCommandRunner {
-  constructor(registry, { mode = DEFAULT_MODE, concurrency = 4, stopOnError = false, timeoutMs = 0, allowUnknown = false } = {}) {
+  constructor(registry, { mode = DEFAULT_MODE, concurrency = 4, stopOnError = false } = {}) {
     if (!(registry instanceof CommandRegistry)) throw new TypeError('MultiCommandRunner requires a CommandRegistry');
     this.registry = registry;
     this.mode = mode;
     this.concurrency = Math.max(1, Number(concurrency) || 1);
     this.stopOnError = Boolean(stopOnError);
-    this.timeoutMs = Math.max(0, Number(timeoutMs) || 0);
-    this.allowUnknown = Boolean(allowUnknown);
   }
 
   async run(inputs, context = {}, options = {}) {
     const mode = options.mode ?? this.mode;
-    const runner = new SingleCommandRunner(this.registry, {
-      allowUnknown: options.allowUnknown ?? this.allowUnknown,
-      timeoutMs: options.timeoutMs ?? this.timeoutMs,
-    });
+    const runner = new SingleCommandRunner(this.registry, { allowUnknown: options.allowUnknown ?? false });
     const list = Array.isArray(inputs) ? inputs : [inputs];
     const startedAt = Date.now();
 
     if (mode === 'parallel') {
-      const results = await this.#runParallel(list, runner, context, options);
+      const results = Array.from({ length: list.length });
+      let index = 0;
+      let shouldStop = false;
+
+      const worker = async () => {
+        while (true) {
+          if (shouldStop) return;
+          const current = index++;
+          if (current >= list.length) return;
+          const result = await runner.run(list[current], context, options);
+          results[current] = result;
+          if (!result.ok && this.stopOnError) {
+            shouldStop = true;
+          }
+        }
+      };
+
+      const workerCount = Math.min(this.concurrency, list.length);
+      await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+      for (let i = 0; i < results.length; i += 1) {
+        if (!results[i]) {
+          results[i] = { ok: false, skipped: true, durationMs: 0 };
+        }
+      }
+
       return this.#summarize(results, startedAt);
     }
 
@@ -246,7 +340,7 @@ export class MultiCommandRunner {
     for (const item of list) {
       const result = await runner.run(item, context, options);
       results.push(result);
-      if (!result.ok && (options.stopOnError ?? this.stopOnError)) break;
+      if (!result.ok && this.stopOnError) break;
     }
     return this.#summarize(results, startedAt);
   }
@@ -255,51 +349,16 @@ export class MultiCommandRunner {
     return this.run(inputs, context, options);
   }
 
-  async #runParallel(list, runner, context, options) {
-    const results = new Array(list.length);
-    let nextIndex = 0;
-    let aborted = false;
-    const limit = Math.min(this.concurrency, list.length);
-    const stopOnError = options.stopOnError ?? this.stopOnError;
-
-    const workers = Array.from({ length: limit }, async () => {
-      while (true) {
-        if (aborted) return;
-        const index = nextIndex++;
-        if (index >= list.length) return;
-        const result = await runner.run(list[index], context, options);
-        results[index] = result;
-        if (!result.ok && stopOnError) {
-          aborted = true;
-          return;
-        }
-      }
-    });
-
-    await Promise.all(workers);
-
-    for (let i = 0; i < results.length; i++) {
-      if (!results[i]) {
-        results[i] = {
-          ok: false,
-          skipped: true,
-          error: new Error('Command was skipped due to stopOnError'),
-          durationMs: 0,
-        };
-      }
-    }
-
-    return results;
-  }
-
   #summarize(results, startedAt) {
-    const ok = results.filter((result) => result.ok).length;
-    const failed = results.length - ok;
+    const success = results.filter((result) => result.ok).length;
+    const skipped = results.filter((result) => result.skipped).length;
+    const failed = results.filter((result) => !result.ok && !result.skipped).length;
     return {
-      ok: failed === 0,
+      ok: failed === 0 && skipped === 0,
       total: results.length,
-      success: ok,
+      success,
       failed,
+      skipped,
       results,
       durationMs: Date.now() - startedAt,
     };
@@ -310,23 +369,10 @@ export class CommandSystem {
   #queue = [];
 
   constructor(options = {}) {
-    const { mode = DEFAULT_MODE, concurrency = 4, stopOnError = false, timeoutMs = 0 } = options;
+    const { mode = DEFAULT_MODE, concurrency = 4, stopOnError = false } = options;
     this.registry = new CommandRegistry();
-    this.single = new SingleCommandRunner(this.registry, { allowUnknown: options.allowUnknown ?? false, timeoutMs });
-    this.multi = new MultiCommandRunner(this.registry, { mode, concurrency, stopOnError, timeoutMs, allowUnknown: options.allowUnknown ?? false });
-    this.middleware = new MiddlewareStack();
-  }
-
-  use(fn, meta) {
-    return this.middleware.use(fn, meta);
-  }
-
-  clearMiddleware() {
-    this.middleware.clear();
-  }
-
-  listMiddleware() {
-    return this.middleware.list();
+    this.single = new SingleCommandRunner(this.registry, options);
+    this.multi = new MultiCommandRunner(this.registry, { mode, concurrency, stopOnError });
   }
 
   register(name, handler, options) {
@@ -337,20 +383,11 @@ export class CommandSystem {
   has(name) { return this.registry.has(name); }
   list() { return this.registry.list(); }
 
-  async run(input, context = {}, options = {}) {
-    const state = { input, context, options, system: this };
-    return this.middleware.run(state, async (nextState) => this.single.run(nextState.input, nextState.context, nextState.options ?? options));
-  }
-
+  async run(input, context = {}, options = {}) { return this.single.run(input, context, options); }
   async runMany(inputs, context = {}, options = {}) { return this.multi.run(inputs, context, options); }
 
-  async runScript(source, context = {}, options = {}) {
-    const script = parseScript(source, options.script ?? {});
-    if (script.length === 0) {
-      return { ok: true, total: 0, success: 0, failed: 0, results: [], durationMs: 0 };
-    }
-    if (script.length === 1) return this.run(script[0], context, options);
-    return this.runMany(script, context, options);
+  async runScript(script, context = {}, options = {}) {
+    return this.runMany(splitScript(script), context, options);
   }
 
   enqueue(input, context = {}) {
@@ -358,9 +395,17 @@ export class CommandSystem {
     return this.#queue.length;
   }
 
+  clearQueue() {
+    this.#queue.length = 0;
+  }
+
+  pending() {
+    return this.#queue.length;
+  }
+
   async flush(options = {}) {
     const items = this.#queue.splice(0);
-    if (items.length === 0) return { ok: true, total: 0, success: 0, failed: 0, results: [], durationMs: 0 };
+    if (items.length === 0) return { ok: true, total: 0, success: 0, failed: 0, skipped: 0, results: [], durationMs: 0 };
 
     const startedAt = Date.now();
     const results = [];
@@ -371,11 +416,14 @@ export class CommandSystem {
     }
 
     const success = results.filter((result) => result.ok).length;
+    const skipped = results.filter((result) => result.skipped).length;
+    const failed = results.filter((result) => !result.ok && !result.skipped).length;
     return {
-      ok: success === results.length,
+      ok: failed === 0 && skipped === 0,
       total: results.length,
       success,
-      failed: results.length - success,
+      failed,
+      skipped,
       results,
       durationMs: Date.now() - startedAt,
     };
