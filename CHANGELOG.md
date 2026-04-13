@@ -1,6 +1,5 @@
 # Changelog
 
-<<<<<<< HEAD
 ## 1.0.5
 
 ### Added
@@ -28,4 +27,3 @@
 - Added `Batch.flushAsync()` for async batch handlers.
 - Added iterable validation to `Queue.pushMany()`.
 - Updated test script to use Node's built-in test runner.
->>>>>>> 5bd5b7a (Fix #1)
