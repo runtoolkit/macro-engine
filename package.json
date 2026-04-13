@@ -1,7 +1,7 @@
 {
   "name": "macro-engine",
-  "version": "1.0.3",
-  "description": "A modular JS runtime engine — tick pipeline, events, hooks, fibers, scheduling, rate limiting, command execution, and script parsing.",
+  "version": "1.0.4",
+  "description": "A modular JS runtime engine — tick pipeline, events, hooks, fibers, scheduling, rate limiting, command execution, script parsing, and more.",
   "type": "module",
   "main": "src/index.js",
   "module": "dist/macro-engine.esm.js",
@@ -79,14 +79,17 @@
     "./script": {
       "node": "./src/script.js",
       "default": "./src/script.js"
+    },
+    "./middleware": {
+      "node": "./src/middleware.js",
+      "default": "./src/middleware.js"
     }
   },
   "files": [
-    "LICENSE",
-    "README.md",
-    "dist",
     "src",
-    "src/script.js"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "rollup -c rollup.config.js",
@@ -112,9 +115,7 @@
     "scheduler",
     "commands",
     "browser",
-    "esm",
-    "security",
-    "parser"
+    "esm"
   ],
   "license": "MIT"
 }

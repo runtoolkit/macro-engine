@@ -1,31 +1,113 @@
 /**
- * Command script helpers.
+ * Script utilities for safe multi-command parsing.
  *
- * These helpers split multi-command scripts without ever evaluating code.
- * Separators are only treated as command boundaries when they appear outside
- * quotes and outside escape sequences.
+ * Supports:
+ * - semicolon-separated commands
+ * - newline-separated commands
+ * - quoted strings and escaping
+ * - line comments starting with # at the beginning of a line or after whitespace
  */
 
-function normalizeLineEndings(input) {
-  return String(input).replace(/\r\n?/g, '\n');
+function isSeparator(ch, separators) {
+  return separators.includes(ch);
 }
 
-function pushToken(list, token) {
-  const value = token.trim();
-  if (value.length > 0) list.push(value);
+function stripComments(source, { allowComments = true, commentMarkers = ['#'] } = {}) {
+  if (!allowComments) return source;
+
+  let output = '';
+  let quote = null;
+  let escaped = false;
+  let atLineStart = true;
+  let sawWhitespaceOnly = true;
+
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+
+    if (escaped) {
+      output += ch;
+      escaped = false;
+      atLineStart = false;
+      sawWhitespaceOnly = false;
+      continue;
+    }
+
+    if (ch === '\\') {
+      output += ch;
+      escaped = true;
+      atLineStart = false;
+      sawWhitespaceOnly = false;
+      continue;
+    }
+
+    if (quote) {
+      output += ch;
+      if (ch === quote) quote = null;
+      if (ch === '\n' || ch === '\r') {
+        atLineStart = true;
+        sawWhitespaceOnly = true;
+      }
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      output += ch;
+      atLineStart = false;
+      sawWhitespaceOnly = false;
+      continue;
+    }
+
+    if (ch === '\n' || ch === '\r') {
+      output += ch;
+      atLineStart = true;
+      sawWhitespaceOnly = true;
+      continue;
+    }
+
+    if (/\s/.test(ch)) {
+      output += ch;
+      if (atLineStart) sawWhitespaceOnly = true;
+      continue;
+    }
+
+    const prev = source[i - 1] ?? '';
+    const isLineComment = commentMarkers.some((marker) => {
+      if (!source.startsWith(marker, i)) return false;
+      if (marker === '#' && !(atLineStart || sawWhitespaceOnly || /\s/.test(prev))) return false;
+      return true;
+    });
+
+    if (isLineComment) {
+      while (i < source.length && source[i] !== '\n' && source[i] !== '\r') i++;
+      output += source[i] ?? '';
+      atLineStart = true;
+      sawWhitespaceOnly = true;
+      continue;
+    }
+
+    output += ch;
+    atLineStart = false;
+    sawWhitespaceOnly = false;
+  }
+
+  return output;
 }
 
-export function splitCommandScript(input, { separators = [';', '\n'] } = {}) {
-  if (typeof input !== 'string') throw new TypeError('Command script must be a string');
+export function splitScript(source, {
+  separators = [';', '\n'],
+  allowComments = true,
+  commentMarkers = ['#'],
+} = {}) {
+  if (typeof source !== 'string') throw new TypeError('Script source must be a string');
 
-  const script = normalizeLineEndings(input);
-  const boundary = new Set(Array.isArray(separators) ? separators.map(String) : [';', '\n']);
-  const items = [];
+  const cleaned = stripComments(source, { allowComments, commentMarkers });
+  const segments = [];
   let current = '';
   let quote = null;
   let escaped = false;
 
-  for (const ch of script) {
+  for (const ch of cleaned) {
     if (escaped) {
       current += ch;
       escaped = false;
@@ -33,23 +115,26 @@ export function splitCommandScript(input, { separators = [';', '\n'] } = {}) {
     }
 
     if (ch === '\\') {
+      current += ch;
       escaped = true;
       continue;
     }
 
     if (quote) {
+      current += ch;
       if (ch === quote) quote = null;
-      else current += ch;
       continue;
     }
 
     if (ch === '"' || ch === "'") {
       quote = ch;
+      current += ch;
       continue;
     }
 
-    if (boundary.has(ch)) {
-      pushToken(items, current);
+    if (isSeparator(ch, separators)) {
+      const trimmed = current.trim();
+      if (trimmed) segments.push(trimmed);
       current = '';
       continue;
     }
@@ -58,20 +143,13 @@ export function splitCommandScript(input, { separators = [';', '\n'] } = {}) {
   }
 
   if (escaped) current += '\\';
-  if (quote) throw new SyntaxError('Unclosed quote in command script');
-  pushToken(items, current);
-  return items;
+  if (quote) throw new SyntaxError('Unclosed quote in script source');
+
+  const trimmed = current.trim();
+  if (trimmed) segments.push(trimmed);
+  return segments;
 }
 
-export function joinCommandScript(commands, separator = ';\n') {
-  if (!Array.isArray(commands)) throw new TypeError('Command list must be an array');
-  const list = commands.map((item) => {
-    if (typeof item !== 'string') throw new TypeError('Command list items must be strings');
-    return item.trim();
-  }).filter(Boolean);
-  return list.join(separator);
-}
-
-export function parseCommandScript(input, options) {
-  return splitCommandScript(input, options);
+export function parseScript(source, options = {}) {
+  return splitScript(source, options);
 }
