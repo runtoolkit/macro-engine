@@ -21,7 +21,7 @@ jobs:
 
       - name: 📦 Create release archive
         run: |
-          zip -r release-${{ github.ref_name }}.zip . \
+          zip -r macro-engine-${{ github.ref_name }}.zip . \
             -x "*.git*" \
                ".github/*" \
                "*.zip" \
@@ -32,7 +32,7 @@ jobs:
       - name: 🚀 Create GitHub Release
         run: |
           gh release create "${{ github.ref_name }}" \
-            "release-${{ github.ref_name }}.zip" \
+            "macro-engine-${{ github.ref_name }}.zip" \
             --generate-notes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
