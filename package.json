@@ -1,7 +1,7 @@
 {
   "name": "macro-engine",
-  "version": "1.0.2",
-  "description": "A modular JS runtime engine — tick pipeline, events, hooks, fibers, scheduling, rate limiting, command execution, and more.",
+  "version": "1.0.3",
+  "description": "A modular JS runtime engine — tick pipeline, events, hooks, fibers, scheduling, rate limiting, command execution, and script parsing.",
   "type": "module",
   "main": "src/index.js",
   "module": "dist/macro-engine.esm.js",
@@ -12,33 +12,86 @@
       "browser": "./dist/macro-engine.esm.js",
       "default": "./src/index.js"
     },
-    "./tick":       { "node": "./src/tick.js",       "default": "./src/tick.js" },
-    "./event":      { "node": "./src/event.js",      "default": "./src/event.js" },
-    "./hook":       { "node": "./src/hook.js",       "default": "./src/hook.js" },
-    "./cooldown":   { "node": "./src/cooldown.js",   "default": "./src/cooldown.js" },
-    "./scheduler":  { "node": "./src/scheduler.js",  "default": "./src/scheduler.js" },
-    "./queue":      { "node": "./src/queue.js",      "default": "./src/queue.js" },
-    "./fiber":      { "node": "./src/fiber.js",      "default": "./src/fiber.js" },
-    "./batch":      { "node": "./src/batch.js",      "default": "./src/batch.js" },
-    "./state":      { "node": "./src/state.js",      "default": "./src/state.js" },
-    "./flag":       { "node": "./src/flag.js",       "default": "./src/flag.js" },
-    "./config":     { "node": "./src/config.js",     "default": "./src/config.js" },
-    "./rate-limit": { "node": "./src/rate-limit.js", "default": "./src/rate-limit.js" },
-    "./command":    { "node": "./src/command.js",    "default": "./src/command.js" },
-    "./math":       { "node": "./src/math.js",       "default": "./src/math.js" },
-    "./string":     { "node": "./src/string.js",     "default": "./src/string.js" },
-    "./log":        { "node": "./src/log.js",        "default": "./src/log.js" }
+    "./tick": {
+      "node": "./src/tick.js",
+      "default": "./src/tick.js"
+    },
+    "./event": {
+      "node": "./src/event.js",
+      "default": "./src/event.js"
+    },
+    "./hook": {
+      "node": "./src/hook.js",
+      "default": "./src/hook.js"
+    },
+    "./cooldown": {
+      "node": "./src/cooldown.js",
+      "default": "./src/cooldown.js"
+    },
+    "./scheduler": {
+      "node": "./src/scheduler.js",
+      "default": "./src/scheduler.js"
+    },
+    "./queue": {
+      "node": "./src/queue.js",
+      "default": "./src/queue.js"
+    },
+    "./fiber": {
+      "node": "./src/fiber.js",
+      "default": "./src/fiber.js"
+    },
+    "./batch": {
+      "node": "./src/batch.js",
+      "default": "./src/batch.js"
+    },
+    "./state": {
+      "node": "./src/state.js",
+      "default": "./src/state.js"
+    },
+    "./flag": {
+      "node": "./src/flag.js",
+      "default": "./src/flag.js"
+    },
+    "./config": {
+      "node": "./src/config.js",
+      "default": "./src/config.js"
+    },
+    "./rate-limit": {
+      "node": "./src/rate-limit.js",
+      "default": "./src/rate-limit.js"
+    },
+    "./command": {
+      "node": "./src/command.js",
+      "default": "./src/command.js"
+    },
+    "./math": {
+      "node": "./src/math.js",
+      "default": "./src/math.js"
+    },
+    "./string": {
+      "node": "./src/string.js",
+      "default": "./src/string.js"
+    },
+    "./log": {
+      "node": "./src/log.js",
+      "default": "./src/log.js"
+    },
+    "./script": {
+      "node": "./src/script.js",
+      "default": "./src/script.js"
+    }
   },
   "files": [
-    "src",
-    "dist",
+    "LICENSE",
     "README.md",
-    "LICENSE"
+    "dist",
+    "src",
+    "src/script.js"
   ],
   "scripts": {
-    "build":          "rollup -c rollup.config.js",
+    "build": "rollup -c rollup.config.js",
     "prepublishOnly": "npm run build",
-    "test":           "node --experimental-vm-modules src/index.js"
+    "test": "node --experimental-vm-modules src/index.js"
   },
   "devDependencies": {
     "rollup": "^4.0.0"
@@ -50,6 +103,18 @@
   "publishConfig": {
     "access": "public"
   },
-  "keywords": ["runtime", "engine", "tick", "events", "fibers", "scheduler", "commands", "browser", "esm"],
+  "keywords": [
+    "runtime",
+    "engine",
+    "tick",
+    "events",
+    "fibers",
+    "scheduler",
+    "commands",
+    "browser",
+    "esm",
+    "security",
+    "parser"
+  ],
   "license": "MIT"
 }

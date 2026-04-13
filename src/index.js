@@ -15,7 +15,15 @@ export { FlagStore, Flag } from './flag.js';
 export { Config } from './config.js';
 export { RateLimit } from './rate-limit.js';
 export { Logger, LogLevel } from './log.js';
-export { CommandSystem, CommandRegistry, SingleCommandRunner, MultiCommandRunner, tokenizeCommandLine, normalizeCommand } from './command.js';
+export {
+  CommandSystem,
+  CommandRegistry,
+  SingleCommandRunner,
+  MultiCommandRunner,
+  tokenizeCommandLine,
+  normalizeCommand,
+} from './command.js';
+export { splitCommandScript, joinCommandScript, parseCommandScript } from './script.js';
 
 export * as math from './math.js';
 export * as str from './string.js';
