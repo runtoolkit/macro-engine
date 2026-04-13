@@ -48,6 +48,9 @@ export class Queue {
   }
 
   pushMany(items) {
+    if (items == null || typeof items[Symbol.iterator] !== 'function') {
+      throw new TypeError('pushMany expects an iterable');
+    }
     for (const item of items) this.push(item);
   }
 

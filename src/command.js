@@ -19,6 +19,24 @@ function isPlainObject(value) {
   return proto === Object.prototype || proto === null;
 }
 
+<<<<<<< HEAD
+=======
+function ownEnumerableDataEntries(value) {
+  if (value === null || typeof value !== 'object') return [];
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const entries = [];
+
+  for (const [key, descriptor] of Object.entries(descriptors)) {
+    if (!descriptor.enumerable) continue;
+    if (DANGEROUS_KEYS.has(key)) continue;
+    if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) continue;
+    entries.push([key, descriptor.value]);
+  }
+
+  return entries;
+}
+
+>>>>>>> 5bd5b7a (Fix #1)
 function cloneValue(value, seen = new WeakMap()) {
   if (value == null || typeof value !== 'object') return value;
   if (seen.has(value)) return seen.get(value);
@@ -34,8 +52,12 @@ function cloneValue(value, seen = new WeakMap()) {
 
   const out = Object.create(null);
   seen.set(value, out);
+<<<<<<< HEAD
   for (const [key, nested] of Object.entries(value)) {
     if (DANGEROUS_KEYS.has(key)) continue;
+=======
+  for (const [key, nested] of ownEnumerableDataEntries(value)) {
+>>>>>>> 5bd5b7a (Fix #1)
     out[key] = cloneValue(nested, seen);
   }
   return out;
@@ -43,18 +65,38 @@ function cloneValue(value, seen = new WeakMap()) {
 
 function safeAssign(target, source) {
   if (!source || typeof source !== 'object') return target;
+<<<<<<< HEAD
   for (const [key, value] of Object.entries(source)) {
     if (DANGEROUS_KEYS.has(key)) continue;
     target[key] = value;
+=======
+  for (const [key, value] of ownEnumerableDataEntries(source)) {
+    target[key] = cloneValue(value);
+>>>>>>> 5bd5b7a (Fix #1)
   }
   return target;
 }
 
+<<<<<<< HEAD
+=======
+function readOwnDataProperty(source, key) {
+  if (!source || typeof source !== 'object') return undefined;
+  const descriptor = Object.getOwnPropertyDescriptor(source, key);
+  return descriptor && Object.prototype.hasOwnProperty.call(descriptor, 'value')
+    ? descriptor.value
+    : undefined;
+}
+
+>>>>>>> 5bd5b7a (Fix #1)
 function normalizePermissionSet(value) {
   if (value == null) return new Set();
   if (value instanceof Set) return new Set([...value].map(String).map((item) => item.trim()).filter(Boolean));
   if (Array.isArray(value)) return new Set(value.map(String).map((item) => item.trim()).filter(Boolean));
+<<<<<<< HEAD
   if (typeof value === 'string') return new Set(value.split(/[,\s]+/).map((item) => item.trim()).filter(Boolean));
+=======
+  if (typeof value === 'string') return new Set(value.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean));
+>>>>>>> 5bd5b7a (Fix #1)
   return new Set();
 }
 
@@ -62,7 +104,11 @@ function normalizeRequires(value) {
   if (value == null) return [];
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
   if (value instanceof Set) return [...value].map(String).map((item) => item.trim()).filter(Boolean);
+<<<<<<< HEAD
   if (typeof value === 'string') return value.split(/[,\s]+/).map((item) => item.trim()).filter(Boolean);
+=======
+  if (typeof value === 'string') return value.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean);
+>>>>>>> 5bd5b7a (Fix #1)
   return [String(value).trim()].filter(Boolean);
 }
 
@@ -149,17 +195,40 @@ export function normalizeCommand(input) {
   }
 
   if (input && typeof input === 'object') {
+<<<<<<< HEAD
     const name = input.name ?? input.cmd ?? input.command ?? '';
     const contextSource = input.context ?? input.ctx ?? null;
+=======
+    const name = readOwnDataProperty(input, 'name')
+      ?? readOwnDataProperty(input, 'cmd')
+      ?? readOwnDataProperty(input, 'command')
+      ?? '';
+    const contextSource = readOwnDataProperty(input, 'context')
+      ?? readOwnDataProperty(input, 'ctx')
+      ?? null;
+    const rawArgs = readOwnDataProperty(input, 'args');
+    const rawMeta = readOwnDataProperty(input, 'meta');
+    const kind = readOwnDataProperty(input, 'kind') ?? (name ? 'command' : 'object');
+
+>>>>>>> 5bd5b7a (Fix #1)
     return {
-      kind: input.kind ?? (name ? 'command' : 'object'),
+      kind,
       name,
+<<<<<<< HEAD
       args: Array.isArray(input.args)
         ? input.args.map((arg) => cloneValue(arg))
         : input.args == null ? [] : [cloneValue(input.args)],
       context: contextSource && typeof contextSource === 'object' ? cloneValue(contextSource) : null,
       meta: input.meta ? cloneValue(input.meta) : undefined,
       raw: input,
+=======
+      args: Array.isArray(rawArgs)
+        ? rawArgs.map((arg) => cloneValue(arg))
+        : rawArgs == null ? [] : [cloneValue(rawArgs)],
+      context: contextSource && typeof contextSource === 'object' ? cloneValue(contextSource) : null,
+      meta: rawMeta === undefined ? undefined : cloneValue(rawMeta),
+      raw: cloneValue(input),
+>>>>>>> 5bd5b7a (Fix #1)
     };
   }
 
@@ -387,11 +456,23 @@ export class CommandSystem {
   async runMany(inputs, context = {}, options = {}) { return this.multi.run(inputs, context, options); }
 
   async runScript(script, context = {}, options = {}) {
+<<<<<<< HEAD
     return this.runMany(splitScript(script), context, options);
+=======
+    return this.runMany(Array.isArray(script) ? script : splitScript(script), context, options);
+>>>>>>> 5bd5b7a (Fix #1)
   }
 
   enqueue(input, context = {}) {
-    this.#queue.push({ input, context });
+    this.#queue.push({ input, context: cloneValue(context) });
+    return this.#queue.length;
+  }
+
+  clearQueue() {
+    this.#queue.length = 0;
+  }
+
+  pending() {
     return this.#queue.length;
   }
 

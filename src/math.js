@@ -2,6 +2,17 @@
  * Math utilities.
  */
 
+function toFiniteNumber(value, name) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) throw new TypeError(`${name} must be a finite number`);
+  return n;
+}
+
+function toInteger(value, name) {
+  const n = toFiniteNumber(value, name);
+  return Math.trunc(n);
+}
+
 export const abs   = (x) => Math.abs(x);
 export const sign  = (x) => Math.sign(x);
 export const signNonzero = (x) => (x >= 0 ? 1 : -1);
@@ -9,11 +20,35 @@ export const min   = (a, b) => Math.min(a, b);
 export const max   = (a, b) => Math.max(a, b);
 export const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 export const minmax = (a, b) => (a <= b ? { min: a, max: b } : { min: b, max: a });
-export const mod   = (x, m) => ((x % m) + m) % m;
-export const wrap  = (x, lo, hi) => lo + mod(x - lo, hi - lo);
-export const ceilDiv = (a, b) => Math.ceil(a / b);
-export const divmod = (a, b) => ({ quot: Math.trunc(a / b), rem: a % b });
-export const mulDiv = (a, b, c) => (a * b) / c;
+export const mod   = (x, m) => {
+  const divisor = toFiniteNumber(m, 'm');
+  if (divisor === 0) throw new RangeError('m must not be 0');
+  const value = toFiniteNumber(x, 'x');
+  return ((value % divisor) + divisor) % divisor;
+};
+export const wrap  = (x, lo, hi) => {
+  const low = toFiniteNumber(lo, 'lo');
+  const high = toFiniteNumber(hi, 'hi');
+  if (high === low) return low;
+  if (high < low) throw new RangeError('hi must be greater than or equal to lo');
+  return low + mod(toFiniteNumber(x, 'x') - low, high - low);
+};
+export const ceilDiv = (a, b) => {
+  const divisor = toFiniteNumber(b, 'b');
+  if (divisor === 0) throw new RangeError('b must not be 0');
+  return Math.ceil(toFiniteNumber(a, 'a') / divisor);
+};
+export const divmod = (a, b) => {
+  const divisor = toFiniteNumber(b, 'b');
+  if (divisor === 0) throw new RangeError('b must not be 0');
+  const dividend = toFiniteNumber(a, 'a');
+  return { quot: Math.trunc(dividend / divisor), rem: dividend % divisor };
+};
+export const mulDiv = (a, b, c) => {
+  const divisor = toFiniteNumber(c, 'c');
+  if (divisor === 0) throw new RangeError('c must not be 0');
+  return (toFiniteNumber(a, 'a') * toFiniteNumber(b, 'b')) / divisor;
+};
 export const round = (x) => Math.round(x);
 export const sqrt  = (x) => Math.sqrt(x);
 export const pow   = (base, exp) => Math.pow(base, exp);
@@ -42,23 +77,39 @@ export const gcd = (a, b) => {
 };
 export const lcm = (a, b) => (a === 0 || b === 0 ? 0 : Math.abs((a / gcd(a, b)) * b));
 
-export const random = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+export const random = (min, max) => {
+  const a = toInteger(min, 'min');
+  const b = toInteger(max, 'max');
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  return Math.floor(Math.random() * (hi - lo + 1)) + lo;
+};
 
 export const weightedRandom = (items) => {
   if (!Array.isArray(items) || items.length === 0) throw new RangeError('weightedRandom expects a non-empty array');
-  const total = items.reduce((s, it) => s + Math.max(0, Number(it.weight) || 0), 0);
+  const normalized = items.map((it, index) => {
+    if (!it || typeof it !== 'object') {
+      throw new TypeError(`weightedRandom item at index ${index} must be an object`);
+    }
+    return { value: it.value, weight: Math.max(0, Number(it.weight) || 0) };
+  });
+  const total = normalized.reduce((s, it) => s + it.weight, 0);
   if (total <= 0) throw new RangeError('weightedRandom expects at least one positive weight');
   let r = Math.random() * total;
-  for (const it of items) {
-    r -= Math.max(0, Number(it.weight) || 0);
+  for (const it of normalized) {
+    r -= it.weight;
     if (r <= 0) return it.value;
   }
-  return items[items.length - 1].value;
+  return normalized[normalized.length - 1].value;
 };
 
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const lerpClamped = (a, b, t) => lerp(a, b, clamp(t, 0, 1));
-export const mapRange = (x, inMin, inMax, outMin, outMax) => outMin + ((x - inMin) / (inMax - inMin)) * (outMax - outMin);
+export const mapRange = (x, inMin, inMax, outMin, outMax) => {
+  const inputSpan = toFiniteNumber(inMax, 'inMax') - toFiniteNumber(inMin, 'inMin');
+  if (inputSpan === 0) throw new RangeError('inMin and inMax must not be equal');
+  return toFiniteNumber(outMin, 'outMin') + ((toFiniteNumber(x, 'x') - toFiniteNumber(inMin, 'inMin')) / inputSpan) * (toFiniteNumber(outMax, 'outMax') - toFiniteNumber(outMin, 'outMin'));
+};
 export const isBetween = (x, lo, hi) => x >= lo && x <= hi;
 
 export const distance2d = (x1, y1, x2, y2) => Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);

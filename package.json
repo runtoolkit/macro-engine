@@ -1,6 +1,10 @@
 {
   "name": "macro-engine",
+<<<<<<< HEAD
   "version": "1.0.5",
+=======
+  "version": "1.0.6",
+>>>>>>> 5bd5b7a (Fix #1)
   "description": "A modular JS runtime engine — tick pipeline, events, hooks, fibers, scheduling, rate limiting, secure command execution, and more.",
   "type": "module",
   "main": "src/index.js",
@@ -90,7 +94,11 @@
   "scripts": {
     "build": "rollup -c rollup.config.js",
     "prepublishOnly": "npm run build",
+<<<<<<< HEAD
     "test": "node --experimental-vm-modules src/index.js"
+=======
+    "test": "node --test"
+>>>>>>> 5bd5b7a (Fix #1)
   },
   "devDependencies": {
     "rollup": "^4.0.0"

@@ -14,6 +14,7 @@ export class FlagStore {
 
   set(entity, key, value = true) {
     this.#entity(entity).set(key, Boolean(value));
+    return true;
   }
 
   get(entity, key, defaultValue = false) {
@@ -27,7 +28,7 @@ export class FlagStore {
   }
 
   delete(entity, key) {
-    this.#store.get(entity)?.delete(key);
+    return this.#store.get(entity)?.delete(key) ?? false;
   }
 
   toggle(entity, key) {
@@ -37,8 +38,8 @@ export class FlagStore {
   }
 
   clear(entity, key) {
-    if (typeof key === 'undefined') this.#store.delete(entity);
-    else this.delete(entity, key);
+    if (typeof key === 'undefined') return this.#store.delete(entity);
+    return this.delete(entity, key);
   }
 
   list(entity) {

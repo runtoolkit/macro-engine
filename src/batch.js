@@ -1,8 +1,6 @@
 /**
  * Batch — collect operations then flush all at once.
  *
-
- *
  * Useful for grouping side-effects that should be applied atomically.
  */
 
@@ -18,6 +16,7 @@ export class Batch {
    * Add a function to the batch.
    */
   add(name, fn) {
+    if (typeof fn !== 'function') throw new TypeError('Batch items must be functions');
     if (!this.#batches.has(name)) this.begin(name);
     this.#batches.get(name).push(fn);
   }
@@ -27,11 +26,37 @@ export class Batch {
    */
   flush(name) {
     const fns = this.#batches.get(name);
-    if (!fns) return;
+    if (!fns) return 0;
+    let count = 0;
     for (const fn of fns) {
-      try { fn(); } catch (e) { console.error('[Batch]', e); }
+      try {
+        fn();
+        count++;
+      } catch (e) {
+        console.error('[Batch]', e);
+      }
     }
     this.#batches.delete(name);
+    return count;
+  }
+
+  /**
+   * Execute all functions in the batch and await any returned promises.
+   */
+  async flushAsync(name) {
+    const fns = this.#batches.get(name);
+    if (!fns) return 0;
+    let count = 0;
+    for (const fn of fns) {
+      try {
+        await fn();
+        count++;
+      } catch (e) {
+        console.error('[Batch]', e);
+      }
+    }
+    this.#batches.delete(name);
+    return count;
   }
 
   /**
