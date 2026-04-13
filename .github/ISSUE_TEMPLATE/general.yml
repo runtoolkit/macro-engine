@@ -1,0 +1,26 @@
+name: General Issue
+description: General questions, feedback, or uncategorized issues
+title: "[GENERAL] "
+labels: ["general"]
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: Issue category
+      options:
+        - General question
+        - Feedback
+        - Suggestion
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Explain your issue or question
+      placeholder: Write here...
+    validations:
+      required: true
