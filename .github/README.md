@@ -1,5 +1,7 @@
 # macro-engine
 
+![Auto Assign](https://github.com/runtoolkit/macro-engine/actions/workflows/auto-assign.yml/badge.svg)
+
 A modular JavaScript runtime engine. Provides a tick pipeline, event bus, lifecycle hooks, coroutine fibers, scheduling, rate limiting, and utility libraries.
 
 Ported from the [macroEngine-datapack](https://github.com/tickwarden/macroEngine-datapack) architecture.
