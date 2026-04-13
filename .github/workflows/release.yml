@@ -1,0 +1,35 @@
+name: Release
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build datapack zip
+        run: |
+          zip -r click-api-${{ github.ref_name }}.zip . \
+            --exclude "*.git*" \
+            --exclude ".github/*" \
+            --exclude "*.zip" \
+            --exclude "*.md" \
+            --exclude "CONTRIBUTING.md" \
+            --exclude "SECURITY.md"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: click-api-${{ github.ref_name }}.zip
+          generate_release_notes: true
