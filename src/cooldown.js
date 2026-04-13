@@ -1,6 +1,13 @@
 /**
  * Cooldown — per-entity, per-key cooldown tracking.
+ *
+ * Uses performance.now() for sub-millisecond precision where available,
+ * falls back to Date.now() (e.g. older environments).
  */
+
+const now = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+  ? () => performance.now()
+  : () => Date.now();
 
 export class Cooldown {
   #store = new Map();
@@ -10,18 +17,16 @@ export class Cooldown {
     return this.#store.get(entity);
   }
 
-  #now() { return Date.now(); }
-
   set(entity, key, duration) {
     const ms = Math.max(0, Number(duration) || 0);
-    this.#entity(entity).set(key, { expiresAt: this.#now() + ms });
+    this.#entity(entity).set(key, { expiresAt: now() + ms });
   }
 
   remaining(entity, key) {
     const entry = this.#entity(entity).get(key);
     if (!entry) return 0;
     if (entry.pausedAt != null) return Math.max(0, entry.expiresAt - entry.pausedAt);
-    return Math.max(0, entry.expiresAt - this.#now());
+    return Math.max(0, entry.expiresAt - now());
   }
 
   isReady(entity, key) { return this.remaining(entity, key) === 0; }
@@ -37,14 +42,14 @@ export class Cooldown {
   pause(entity, key) {
     const entry = this.#entity(entity).get(key);
     if (!entry || entry.pausedAt != null) return false;
-    entry.pausedAt = this.#now();
+    entry.pausedAt = now();
     return true;
   }
 
   resume(entity, key) {
     const entry = this.#entity(entity).get(key);
     if (!entry || entry.pausedAt == null) return false;
-    const elapsed = this.#now() - entry.pausedAt;
+    const elapsed = now() - entry.pausedAt;
     entry.expiresAt += elapsed;
     delete entry.pausedAt;
     return true;

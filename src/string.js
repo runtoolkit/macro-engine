@@ -1,5 +1,5 @@
 /**
- * String utilities — port of macro:lib/string/* + macro:string/*
+ * String utilities.
  *
  * All functions are pure / stateless.
  */
@@ -37,7 +37,7 @@ export const formatNumber = (n, locale = 'en-US') =>
 
 /**
  * Convert a tick count to a human-readable time string.
- * 20 ticks = 1 second.
+
  * @param {number} ticks
  * @returns {string}  e.g. "1h 23m 45s"
  */

@@ -1,31 +1,55 @@
 {
   "name": "macro-engine",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A modular JS runtime engine — tick pipeline, events, hooks, fibers, scheduling, rate limiting, command execution, and more.",
   "type": "module",
   "main": "src/index.js",
+  "module": "dist/macro-engine.esm.js",
+  "browser": "dist/macro-engine.esm.js",
   "exports": {
-    ".": "./src/index.js",
-    "./tick": "./src/tick.js",
-    "./event": "./src/event.js",
-    "./hook": "./src/hook.js",
-    "./cooldown": "./src/cooldown.js",
-    "./scheduler": "./src/scheduler.js",
-    "./queue": "./src/queue.js",
-    "./fiber": "./src/fiber.js",
-    "./batch": "./src/batch.js",
-    "./state": "./src/state.js",
-    "./flag": "./src/flag.js",
-    "./config": "./src/config.js",
-    "./rate-limit": "./src/rate-limit.js",
-    "./command": "./src/command.js",
-    "./math": "./src/math.js",
-    "./string": "./src/string.js",
-    "./log": "./src/log.js"
+    ".": {
+      "node": "./src/index.js",
+      "browser": "./dist/macro-engine.esm.js",
+      "default": "./src/index.js"
+    },
+    "./tick":       { "node": "./src/tick.js",       "default": "./src/tick.js" },
+    "./event":      { "node": "./src/event.js",      "default": "./src/event.js" },
+    "./hook":       { "node": "./src/hook.js",       "default": "./src/hook.js" },
+    "./cooldown":   { "node": "./src/cooldown.js",   "default": "./src/cooldown.js" },
+    "./scheduler":  { "node": "./src/scheduler.js",  "default": "./src/scheduler.js" },
+    "./queue":      { "node": "./src/queue.js",      "default": "./src/queue.js" },
+    "./fiber":      { "node": "./src/fiber.js",      "default": "./src/fiber.js" },
+    "./batch":      { "node": "./src/batch.js",      "default": "./src/batch.js" },
+    "./state":      { "node": "./src/state.js",      "default": "./src/state.js" },
+    "./flag":       { "node": "./src/flag.js",       "default": "./src/flag.js" },
+    "./config":     { "node": "./src/config.js",     "default": "./src/config.js" },
+    "./rate-limit": { "node": "./src/rate-limit.js", "default": "./src/rate-limit.js" },
+    "./command":    { "node": "./src/command.js",    "default": "./src/command.js" },
+    "./math":       { "node": "./src/math.js",       "default": "./src/math.js" },
+    "./string":     { "node": "./src/string.js",     "default": "./src/string.js" },
+    "./log":        { "node": "./src/log.js",        "default": "./src/log.js" }
   },
+  "files": [
+    "src",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "test": "node --experimental-vm-modules src/index.js"
+    "build":          "rollup -c rollup.config.js",
+    "prepublishOnly": "npm run build",
+    "test":           "node --experimental-vm-modules src/index.js"
   },
-  "keywords": ["runtime", "engine", "tick", "events", "fibers", "scheduler", "commands"],
+  "devDependencies": {
+    "rollup": "^4.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/runtoolkit/macro-engine"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": ["runtime", "engine", "tick", "events", "fibers", "scheduler", "commands", "browser", "esm"],
   "license": "MIT"
 }

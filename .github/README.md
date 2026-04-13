@@ -4,14 +4,19 @@
 
 A modular JavaScript runtime engine. Provides a tick pipeline, event bus, lifecycle hooks, coroutine fibers, scheduling, rate limiting, and utility libraries.
 
-Ported from the [macroEngine-datapack](https://github.com/tickwarden/macroEngine-datapack) architecture.
+Works in both **Node.js** and **browser** environments.
 
 ---
 
 ## Installation
 
 ```bash
-# copy src/ into your project, or reference index.js directly
+npm install macro-engine
+```
+
+Or copy `src/` directly into your project:
+
+```js
 import { Engine } from './src/index.js';
 ```
 
@@ -20,77 +25,89 @@ import { Engine } from './src/index.js';
 ## Quick start
 
 ```js
-import { Engine } from './src/index.js';
+import { Engine } from 'macro-engine';
 
 const engine = new Engine({ debug: true });
 
-// Register a tick channel — fires every 20 ticks (1s at 20 TPS)
+// Register a tick channel — fires every 20 ticks
 engine.tick.register('heartbeat', (tick) => {
   console.log('tick:', tick);
 }, { rate: 20 });
 
 // Register an event handler
-engine.events.register('player_join', ({ name }) => {
+engine.events.register('user_join', ({ name }) => {
   console.log(`${name} joined`);
 });
 
-// Fire the event
-engine.events.fire('player_join', { name: 'Alice' });
+engine.events.fire('user_join', { name: 'Alice' });
 
 engine.start();
 ```
 
 ---
 
+## Browser (script tag)
+
+```html
+<script src="dist/macro-engine.umd.js"></script>
+<script>
+  const { Engine } = MacroEngine;
+  const engine = new Engine();
+  engine.start();
+</script>
+```
+
+---
+
 ## Modules
 
-| Module | Class / exports | Original |
-|--------|----------------|----------|
-| `tick.js` | `TickLoop` | `macro:tick/*` |
-| `event.js` | `EventBus` | `macro:event/*` |
-| `hook.js` | `HookSystem`, `HOOKS` | `macro:hook/*` |
-| `cooldown.js` | `Cooldown` | `macro:cooldown/*` |
-| `scheduler.js` | `Scheduler` | `macro:lib/schedule`, `repeat`, `wait`, `debounce`, `throttle`, `once` |
-| `queue.js` | `Queue` | `macro:queue/*` |
-| `fiber.js` | `FiberManager` | `macro:lib/fiber/*` |
-| `batch.js` | `Batch` | `macro:lib/batch/*` |
-| `state.js` | `State` | `macro:state/*`, player vars |
-| `flag.js` | `FlagStore`, `Flag` | boolean flags |
-| `config.js` | `Config` | `macro:config/*` |
-| `rate-limit.js` | `RateLimit` | `macro:rate_limit/*` |
-| `command.js` | `CommandSystem`, `CommandRegistry` | single + multi command execution |
-| `log.js` | `Logger`, `LogLevel` | `macro:log/*` |
-| `math.js` | named exports | `macro:math/*` |
-| `string.js` | named exports | `macro:lib/string/*`, `macro:string/*` |
-| `index.js` | `Engine` + re-exports | all |
+| Module | Class / Exports |
+|--------|----------------|
+| `tick.js` | `TickLoop` |
+| `event.js` | `EventBus` |
+| `hook.js` | `HookSystem`, `HOOKS` |
+| `cooldown.js` | `Cooldown` |
+| `scheduler.js` | `Scheduler` |
+| `queue.js` | `Queue` |
+| `fiber.js` | `FiberManager` |
+| `batch.js` | `Batch` |
+| `state.js` | `State` |
+| `flag.js` | `FlagStore`, `Flag` |
+| `config.js` | `Config` |
+| `rate-limit.js` | `RateLimit` |
+| `command.js` | `CommandSystem`, `CommandRegistry` |
+| `log.js` | `Logger`, `LogLevel` |
+| `math.js` | named exports |
+| `string.js` | named exports |
+| `index.js` | `Engine` + re-exports |
 
 ---
 
 ## TickLoop
 
 ```js
-import { TickLoop } from './src/tick.js';
+import { TickLoop } from 'macro-engine/tick';
 
-const loop = new TickLoop(50); // 50ms = 20 TPS
+const loop = new TickLoop(50); // 50ms per tick
 
-loop.register('myChannel', (tick) => {
-  // runs every tick
-});
+loop.register('myChannel', (tick) => { });
 
-loop.register('slow', (tick) => {
-  // runs every 5 ticks
-}, { rate: 5, offset: 2 });
+loop.register('slow', (tick) => { }, { rate: 5, offset: 2 });
 
-loop.register('conditional', (tick) => {
-  // runs only when condition is true
-}, { condition: () => someFlag });
+loop.register('conditional', (tick) => { }, { condition: () => someFlag });
 
 loop.start();
 loop.pause();
 loop.resume();
 loop.stop();
+```
 
-loop.list(); // → [{ name, rate, offset, enabled }]
+### Worker thread (offload to background thread)
+
+```js
+const { loop, worker } = TickLoop.fromWorker(50);
+loop.register('bg', (tick) => { });
+loop.start();
 ```
 
 ---
@@ -98,23 +115,19 @@ loop.list(); // → [{ name, rate, offset, enabled }]
 ## EventBus
 
 ```js
-import { EventBus } from './src/event.js';
+import { EventBus } from 'macro-engine/event';
 
 const bus = new EventBus();
 
-const off = bus.register('my_event', (ctx) => {
-  console.log('fired:', ctx);
-});
+const off = bus.register('my_event', (ctx) => { console.log(ctx); });
 
-bus.register('once_event', (ctx) => {
-  console.log('fires only once');
-}, { once: true });
+bus.register('once_event', (ctx) => { }, { once: true });
 
 bus.fire('my_event', { value: 42 });
-bus.fireQueued('my_event', { value: 99 }); // deferred
+bus.fireQueued('my_event', { value: 99 });
 bus.flushQueue();
 
-off(); // unregister
+off();
 ```
 
 ---
@@ -122,16 +135,15 @@ off(); // unregister
 ## HookSystem
 
 ```js
-import { HookSystem, HOOKS } from './src/hook.js';
+import { HookSystem } from 'macro-engine/hook';
 
 const hooks = new HookSystem();
 
-hooks.bind('on_player_join', 'my_plugin', (ctx) => {
+hooks.bind('on_user_join', 'my_plugin', (ctx) => {
   console.log('joined:', ctx.name);
 });
 
-// Host calls dispatch when the event happens:
-hooks.dispatch('on_player_join', { name: 'Alice' });
+hooks.dispatch('on_user_join', { name: 'Alice' });
 
 hooks.unbind('my_plugin');
 ```
@@ -141,22 +153,20 @@ hooks.unbind('my_plugin');
 ## Cooldown
 
 ```js
-import { Cooldown } from './src/cooldown.js';
+import { Cooldown } from 'macro-engine/cooldown';
 
 const cd = new Cooldown();
 
-cd.set('alice', 'ability', 3000);  // 3 second cooldown
+cd.set('alice', 'ability', 3000);
 
 if (cd.isReady('alice', 'ability')) {
   cd.set('alice', 'ability', 3000);
-  // use ability
 }
 
-cd.remaining('alice', 'ability');   // ms left
+cd.remaining('alice', 'ability');
 cd.pause('alice', 'ability');
 cd.resume('alice', 'ability');
 cd.extend('alice', 'ability', 1000);
-cd.clear('alice', 'ability');
 ```
 
 ---
@@ -164,17 +174,17 @@ cd.clear('alice', 'ability');
 ## Scheduler
 
 ```js
-import { Scheduler } from './src/scheduler.js';
+import { Scheduler } from 'macro-engine/scheduler';
 
 const s = new Scheduler();
 
-s.schedule('welcome', () => console.log('hi'), 1000);          // once after 1s
-s.schedule('heartbeat', () => console.log('beat'), 0, 2000);   // every 2s
+s.schedule('hello', () => console.log('hi'), 1000);
+s.schedule('heartbeat', () => console.log('beat'), 0, 2000);
 s.cancel('heartbeat');
 
-s.repeat((i) => console.log('step', i), 5, 500);  // 5 times, 500ms apart
+s.repeat((i) => console.log('step', i), 5, 500);
 
-await s.wait(1000);   // Promise — works in async functions
+await s.wait(1000);
 
 const throttled = s.throttle(fn, 100);
 const debounced = s.debounce(fn, 300);
@@ -184,33 +194,40 @@ s.once('init', () => console.log('only once'));
 
 ---
 
+## Queue
+
+```js
+import { Queue } from 'macro-engine/queue';
+
+const q = new Queue({ rate: 1 });
+
+q.push(fn);
+q.flush();
+q.flushAll();
+
+// Adaptive drain — scales rate automatically under load
+q.setAdaptiveRate(1, 20);
+```
+
+---
+
 ## Fibers
 
 ```js
-import { FiberManager } from './src/fiber.js';
+import { FiberManager } from 'macro-engine/fiber';
 
 const fibers = new FiberManager();
 
 async function* countdown(fiber) {
   for (let i = 3; i >= 0; i--) {
     console.log(i);
-    await fiber.wait(1000);   // auto-resume after 1s
+    await fiber.wait(1000);
+    if (!fiber.alive) break;
   }
 }
 
-async function* interactive(fiber) {
-  console.log('waiting for resume...');
-  await fiber.yield();        // suspended until fibers.resume('id') is called
-  console.log('resumed!');
-}
-
 fibers.spawn('countdown', countdown);
-fibers.spawn('interactive', interactive);
-
-// Later, from elsewhere:
-fibers.resume('interactive');
 fibers.kill('countdown');
-fibers.isAlive('countdown'); // false
 ```
 
 ---
@@ -218,24 +235,15 @@ fibers.isAlive('countdown'); // false
 ## RateLimit
 
 ```js
-import { RateLimit } from './src/rate-limit.js';
+import { RateLimit } from 'macro-engine/rate-limit';
 
 const rl = new RateLimit();
 
-// Max 5 hits per second for a global event
-rl.config('global:my_event', 5, 1000);
+rl.config('global:action', 5, 1000);
+rl.config('user:purchase', 3, 60_000);
 
-// Per-player template (key is auto-expanded)
-rl.config('player:shop', 3, 60_000); // 3 purchases per minute per player
-
-if (rl.check('global:my_event')) {
-  // allowed
-}
-
-// Per-entity: uses the "player:shop" template automatically
-if (rl.check('player:shop:alice')) {
-  // allowed for alice
-}
+if (rl.check('global:action')) { }
+if (rl.check('user:purchase:alice')) { }
 ```
 
 ---
@@ -243,33 +251,34 @@ if (rl.check('player:shop:alice')) {
 ## Math
 
 ```js
-import * as math from './src/math.js';
+import * as math from 'macro-engine/math';
 
-math.clamp(15, 0, 10);         // 10
-math.lerp(0, 100, 0.25);       // 25
-math.distance2d(0, 0, 3, 4);  // 5
-math.random(1, 6);             // d6
+math.clamp(15, 0, 10);
+math.lerp(0, 100, 0.25);
+math.distance2d(0, 0, 3, 4);
+math.random(1, 6);
 math.weightedRandom([
   { value: 'common', weight: 70 },
   { value: 'rare',   weight: 25 },
   { value: 'epic',   weight: 5  },
 ]);
-math.vec.dot([1,0,0], [0,1,0]); // 0
+math.vec.dot([1,0,0], [0,1,0]);
 ```
 
 ---
 
-## String
+## CommandSystem
 
 ```js
-import * as str from './src/string.js';
+import { CommandSystem } from 'macro-engine/command';
 
-str.progressBar(7, 10, 20);         // "██████████████░░░░░░"
-str.formatTicks(1200);              // "1m 0s"
-str.ordinal(3);                     // "3rd"
-str.pluralize(5, 'item');           // "5 items"
-str.formatNumber(1234567);          // "1,234,567"
-str.replace('hello world', 'world', 'JS'); // "hello JS"
+const commands = new CommandSystem();
+
+commands.register('echo', ({ args }) => args.join(' '));
+commands.register('add', ({ args }) => args.map(Number).reduce((a, b) => a + b, 0));
+
+await commands.run('echo hello world');
+await commands.runMany(['echo first', 'echo second'], {}, { mode: 'series' });
 ```
 
 ---
@@ -277,21 +286,3 @@ str.replace('hello world', 'world', 'JS'); // "hello JS"
 ## License
 
 MIT
-
----
-
-## CommandSystem
-
-```js
-import { CommandSystem } from './src/command.js';
-
-const commands = new CommandSystem();
-
-commands.register('echo', async ({ args }) => args.join(' '));
-commands.register('sum', ({ args }) => args.map(Number).reduce((a, b) => a + b, 0));
-
-await commands.run('echo hello world');
-await commands.runMany(['echo first', 'echo second'], {}, { mode: 'series' });
-```
-
-The command layer stays data-driven: strings are parsed, registered handlers run, and nothing is sent to eval or the shell.

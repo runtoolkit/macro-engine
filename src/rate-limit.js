@@ -1,6 +1,13 @@
 /**
  * RateLimit — sliding window rate limiter.
+ *
+ * Uses performance.now() for sub-millisecond precision where available,
+ * falls back to Date.now().
  */
+
+const now = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+  ? () => performance.now()
+  : () => Date.now();
 
 export class RateLimit {
   #rules = new Map();
@@ -21,22 +28,22 @@ export class RateLimit {
     const rule = this.#resolveRule(key);
     if (!rule) return true;
 
-    const now = Date.now();
+    const t = now();
     const hits = this.#getHits(key);
     const window = rule.windowMs;
 
-    while (hits.length > 0 && now - hits[0] > window) hits.shift();
+    while (hits.length > 0 && t - hits[0] > window) hits.shift();
     if (hits.length >= rule.maxHits) return false;
 
-    hits.push(now);
+    hits.push(t);
     return true;
   }
 
   peek(key) {
     const rule = this.#resolveRule(key);
     if (!rule) return true;
-    const now = Date.now();
-    const hits = this.#getHits(key).filter((t) => now - t <= rule.windowMs);
+    const t = now();
+    const hits = this.#getHits(key).filter((ts) => t - ts <= rule.windowMs);
     return hits.length < rule.maxHits;
   }
 
@@ -45,18 +52,18 @@ export class RateLimit {
     if (!rule) return Infinity;
     const hits = this.#getHits(key);
     if (hits.length < rule.maxHits) return 0;
-    const now = Date.now();
-    return Math.max(0, rule.windowMs - (now - hits[0]));
+    const t = now();
+    return Math.max(0, rule.windowMs - (t - hits[0]));
   }
 
   reset(key) { this.#hits.delete(key); }
 
   cleanup() {
-    const now = Date.now();
+    const t = now();
     for (const [key, hits] of this.#hits.entries()) {
       const rule = this.#resolveRule(key);
       if (!rule) continue;
-      const filtered = hits.filter((t) => now - t <= rule.windowMs);
+      const filtered = hits.filter((ts) => t - ts <= rule.windowMs);
       if (filtered.length === 0) this.#hits.delete(key);
       else this.#hits.set(key, filtered);
     }

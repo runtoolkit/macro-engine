@@ -1,7 +1,7 @@
 /**
  * Batch — collect operations then flush all at once.
  *
- * Equivalent of macro:lib/batch/*  (begin/add/flush/cancel)
+
  *
  * Useful for grouping side-effects that should be applied atomically.
  */

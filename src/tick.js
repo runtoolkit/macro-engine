@@ -1,5 +1,8 @@
 /**
  * TickLoop — tick pipeline with channel support.
+ *
+ * Browser-compatible. Optionally offloads the interval to a Worker thread
+ * (via TickLoop.fromWorker) to avoid main-thread jank.
  */
 
 export class TickLoop {
@@ -13,6 +16,42 @@ export class TickLoop {
     const value = Number(msPerTick);
     if (!Number.isFinite(value) || value <= 0) throw new RangeError('msPerTick must be a positive number');
     this.#msPerTick = value;
+  }
+
+  /**
+   * Create a TickLoop driven by a Worker thread instead of the main thread.
+   * The Worker posts a message every msPerTick ms; the main thread dispatches
+   * channels on each message. Falls back to regular setInterval if Workers
+   * are unavailable (e.g. older browsers, some sandboxed environments).
+   *
+   * @param {number} msPerTick
+   * @param {string} [workerUrl] — URL of tick-worker.js (default: auto-resolved)
+   * @returns {{ loop: TickLoop, worker: Worker|null }}
+   */
+  static fromWorker(msPerTick = 50, workerUrl = null) {
+    const loop = new TickLoop(msPerTick);
+
+    if (typeof Worker === 'undefined') {
+      // fallback — no Worker support
+      return { loop, worker: null };
+    }
+
+    const url = workerUrl ?? new URL('./tick-worker.js', import.meta.url).href;
+    const worker = new Worker(url);
+
+    // Override start/stop to use Worker messages instead of setInterval
+    loop.start = () => {
+      worker.onmessage = () => loop.step();
+      worker.postMessage({ type: 'start', msPerTick });
+      return true;
+    };
+    loop.stop = () => {
+      worker.postMessage({ type: 'stop' });
+      worker.onmessage = null;
+      return true;
+    };
+
+    return { loop, worker };
   }
 
   start() {

@@ -3,14 +3,11 @@
  */
 
 export const HOOKS = Object.freeze([
-  'on_break_block', 'on_placed_block', 'on_eat', 'on_player_death',
-  'on_player_join', 'on_player_respawn', 'on_entity_kill', 'on_fish_caught',
-  'on_trade', 'on_item_use', 'on_dimension_change', 'on_sneak_start',
-  'on_sneak_stop', 'on_sprint_start', 'on_sprint_stop', 'on_jump',
-  'on_elytra_start', 'on_elytra_stop', 'on_interact_anvil',
-  'on_interact_shulker_box', 'on_level_up', 'on_target_hit',
-  'on_open_chest', 'on_using_item', 'on_killed_by_arrow',
-  'on_hero_of_the_village', 'on_drop',
+  'on_start', 'on_stop', 'on_connect', 'on_disconnect',
+  'on_join', 'on_leave', 'on_error', 'on_ready',
+  'on_message', 'on_command', 'on_tick', 'on_update',
+  'on_state_change', 'on_config_change', 'on_event',
+  'on_before_flush', 'on_after_flush',
 ]);
 
 export class HookSystem {
