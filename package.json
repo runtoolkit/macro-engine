@@ -1,0 +1,30 @@
+{
+  "name": "macro-engine",
+  "version": "1.0.0",
+  "description": "A modular JS runtime engine — tick pipeline, events, hooks, fibers, scheduling, rate limiting, and more.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./tick": "./src/tick.js",
+    "./event": "./src/event.js",
+    "./hook": "./src/hook.js",
+    "./cooldown": "./src/cooldown.js",
+    "./scheduler": "./src/scheduler.js",
+    "./queue": "./src/queue.js",
+    "./fiber": "./src/fiber.js",
+    "./batch": "./src/batch.js",
+    "./state": "./src/state.js",
+    "./flag": "./src/flag.js",
+    "./config": "./src/config.js",
+    "./rate-limit": "./src/rate-limit.js",
+    "./math": "./src/math.js",
+    "./string": "./src/string.js",
+    "./log": "./src/log.js"
+  },
+  "scripts": {
+    "test": "node --experimental-vm-modules src/index.js"
+  },
+  "keywords": ["runtime", "engine", "tick", "events", "fibers", "scheduler"],
+  "license": "MIT"
+}
