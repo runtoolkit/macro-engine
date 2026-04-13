@@ -21,18 +21,18 @@ jobs:
 
       - name: 📦 Create release archive
         run: |
-          zip -r macro-engine-${{ github.ref_name }}.zip . \
+          VERSION="${GITHUB_REF#refs/tags/}"
+          zip -r "macro-engine-${VERSION}.zip" . \
             -x "*.git*" \
                ".github/*" \
                "*.zip" \
-               "*.md" \
-               "CONTRIBUTING.md" \
-               "SECURITY.md"
+               "*.md"
 
       - name: 🚀 Create GitHub Release
         run: |
-          gh release create "${{ github.ref_name }}" \
-            "macro-engine-${{ github.ref_name }}.zip" \
+          VERSION="${GITHUB_REF#refs/tags/}"
+          gh release create "$VERSION" \
+            "macro-engine-${VERSION}.zip" \
             --generate-notes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
