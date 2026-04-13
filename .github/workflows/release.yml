@@ -8,28 +8,31 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout
+      - name: 📥 Checkout
         uses: actions/checkout@v6
 
-      - name: Build datapack zip
+      - name: 📦 Create release archive
         run: |
-          zip -r click-api-${{ github.ref_name }}.zip . \
-            --exclude "*.git*" \
-            --exclude ".github/*" \
-            --exclude "*.zip" \
-            --exclude "*.md" \
-            --exclude "CONTRIBUTING.md" \
-            --exclude "SECURITY.md"
+          zip -r release-${{ github.ref_name }}.zip . \
+            -x "*.git*" \
+               ".github/*" \
+               "*.zip" \
+               "*.md" \
+               "CONTRIBUTING.md" \
+               "SECURITY.md"
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: click-api-${{ github.ref_name }}.zip
-          generate_release_notes: true
+      - name: 🚀 Create GitHub Release
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            "release-${{ github.ref_name }}.zip" \
+            --generate-notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
