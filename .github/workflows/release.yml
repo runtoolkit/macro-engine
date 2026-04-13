@@ -28,11 +28,18 @@ jobs:
                "*.zip" \
                "*.md"
 
-      - name: 🚀 Create GitHub Release
+      - name: 🚀 Create or Update Release
         run: |
           VERSION="${GITHUB_REF#refs/tags/}"
-          gh release create "$VERSION" \
-            "macro-engine-${VERSION}.zip" \
-            --generate-notes
+
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release exists → uploading asset"
+            gh release upload "$VERSION" "macro-engine-${VERSION}.zip" --clobber
+          else
+            echo "Creating release"
+            gh release create "$VERSION" \
+              "macro-engine-${VERSION}.zip" \
+              --generate-notes
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
