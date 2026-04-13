@@ -1,138 +1,105 @@
 /**
  * Scheduler — delayed / repeated execution primitives.
- *
- * Equivalent of macro:lib/schedule, macro:lib/repeat,
- * macro:lib/wait, macro:lib/debounce, macro:lib/throttle,
- * macro:lib/once, macro:lib/once_per_player, macro:lib/sync_tick
- *
- * All durations are in milliseconds.
  */
 
 export class Scheduler {
-  #schedules = new Map();   // key → { timerId, fn, interval }
-  #usedOnce  = new Set();   // keys for once()
+  #schedules = new Map();
+  #usedOnce  = new Set();
 
-  // ── schedule / cancel ────────────────────────────────────────
-
-  /**
-   * Schedule fn to run after `delay` ms, then every `interval` ms if given.
-   * @param {string}   key       Unique name (cancellable)
-   * @param {Function} fn
-   * @param {number}   delay     ms until first call
-   * @param {number}   [interval]  ms between repeats (omit for one-shot)
-   */
   schedule(key, fn, delay, interval = 0) {
+    if (typeof key !== 'string' || !key.trim()) throw new TypeError('Schedule key must be a non-empty string');
+    if (typeof fn !== 'function') throw new TypeError('Scheduled fn must be a function');
+    const wait = Math.max(0, Number(delay) || 0);
+    const repeat = Math.max(0, Number(interval) || 0);
+
     this.cancel(key);
     const run = () => {
-      try { fn(); } catch (e) { console.error('[Scheduler]', e); }
-      if (interval > 0) {
+      try { fn(); } catch (error) { console.error('[Scheduler]', error); }
+      if (repeat > 0) {
         const id = setInterval(() => {
-          try { fn(); } catch (e) { console.error('[Scheduler]', e); }
-        }, interval);
-        this.#schedules.set(key, { timerId: id, fn, interval, repeated: true });
+          try { fn(); } catch (error) { console.error('[Scheduler]', error); }
+        }, repeat);
+        this.#schedules.set(key, { timerId: id, fn, interval: repeat, repeated: true });
       } else {
         this.#schedules.delete(key);
       }
     };
-    const id = setTimeout(run, delay);
-    this.#schedules.set(key, { timerId: id, fn, interval, repeated: false });
+
+    const id = setTimeout(run, wait);
+    this.#schedules.set(key, { timerId: id, fn, interval: repeat, repeated: false });
   }
 
-  /** Cancel a scheduled task by key. */
+  scheduleEvery(key, fn, interval) {
+    this.schedule(key, fn, 0, interval);
+  }
+
   cancel(key) {
     const entry = this.#schedules.get(key);
-    if (!entry) return;
+    if (!entry) return false;
     (entry.repeated ? clearInterval : clearTimeout)(entry.timerId);
     this.#schedules.delete(key);
+    return true;
   }
 
-  /** List all active schedule keys. */
+  cancelAll() {
+    for (const key of [...this.#schedules.keys()]) this.cancel(key);
+  }
+
   list() { return [...this.#schedules.keys()]; }
 
-  // ── repeat ───────────────────────────────────────────────────
-
-  /**
-   * Repeat fn N times with `interval` ms between calls.
-   * @param {Function} fn
-   * @param {number}   n          Number of times
-   * @param {number}   interval   ms between calls
-   * @returns {Function}          cancel()
-   */
   repeat(fn, n, interval) {
+    if (typeof fn !== 'function') throw new TypeError('repeat fn must be a function');
     let count = 0;
     const id = setInterval(() => {
-      try { fn(count); } catch (e) { console.error('[Scheduler]', e); }
+      try { fn(count); } catch (error) { console.error('[Scheduler]', error); }
       if (++count >= n) clearInterval(id);
-    }, interval);
+    }, Math.max(0, Number(interval) || 0));
     return () => clearInterval(id);
   }
 
-  // ── wait ─────────────────────────────────────────────────────
+  wait(ms) { return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0))); }
 
-  /**
-   * Returns a Promise that resolves after `ms` milliseconds.
-   */
-  wait(ms) { return new Promise(res => setTimeout(res, ms)); }
-
-  // ── debounce ─────────────────────────────────────────────────
-
-  /**
-   * Returns a debounced version of fn.
-   * Only fires after `delay` ms of silence.
-   */
   debounce(fn, delay) {
+    if (typeof fn !== 'function') throw new TypeError('debounce fn must be a function');
     let timer = null;
     return (...args) => {
       clearTimeout(timer);
-      timer = setTimeout(() => { timer = null; fn(...args); }, delay);
+      timer = setTimeout(() => { timer = null; fn(...args); }, Math.max(0, Number(delay) || 0));
     };
   }
 
-  // ── throttle ─────────────────────────────────────────────────
-
-  /**
-   * Returns a throttled version of fn.
-   * Fires at most once per `interval` ms.
-   */
   throttle(fn, interval) {
-    let last = 0;
+    if (typeof fn !== 'function') throw new TypeError('throttle fn must be a function');
+    let last = Number.NEGATIVE_INFINITY;
+    const wait = Math.max(0, Number(interval) || 0);
     return (...args) => {
       const now = Date.now();
-      if (now - last < interval) return;
+      if (now - last < wait) return;
       last = now;
       fn(...args);
     };
   }
 
-  // ── once ─────────────────────────────────────────────────────
-
-  /**
-   * Run fn only the first time this key is seen.
-   */
   once(key, fn) {
-    if (this.#usedOnce.has(key)) return;
+    if (this.#usedOnce.has(key)) return false;
     this.#usedOnce.add(key);
-    try { fn(); } catch (e) { console.error('[Scheduler]', e); }
+    try { fn(); } catch (error) { console.error('[Scheduler]', error); }
+    return true;
   }
 
   resetOnce(key) { this.#usedOnce.delete(key); }
 
-  // ── tick guard ───────────────────────────────────────────────
-
-  /**
-   * Run fn only once per unique (key, tickId) combination.
-   * Useful when multiple code paths could trigger the same effect in one tick.
-   */
   tickGuard(key, tickId, fn) {
     const guard = `${key}::${tickId}`;
-    if (this.#usedOnce.has(guard)) return;
+    if (this.#usedOnce.has(guard)) return false;
     this.#usedOnce.add(guard);
-    try { fn(); } catch (e) { console.error('[Scheduler]', e); }
+    try { fn(); } catch (error) { console.error('[Scheduler]', error); }
+    return true;
   }
 
   clearTickGuard(key) {
-    for (const g of this.#usedOnce) {
-      if (g.startsWith(`${key}::`)) this.#usedOnce.delete(g);
+    for (const guard of [...this.#usedOnce]) {
+      if (guard.startsWith(`${key}::`)) this.#usedOnce.delete(guard);
     }
   }
 }

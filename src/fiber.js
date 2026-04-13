@@ -1,103 +1,91 @@
 /**
  * Fiber — cooperative coroutines via async generators.
- *
- * Equivalent of macro:lib/fiber/*  (spawn/yield/resume/kill/is_alive)
- *
- * A fiber is an async generator function that can yield at any point.
- * The caller controls when execution resumes (resume() / auto-resume via TickLoop).
- *
- * Example:
- *
- *   async function* myFiber(fiber) {
- *     console.log('start');
- *     await fiber.yield();          // pause until resume()
- *     console.log('continued');
- *     await fiber.wait(500);        // pause for 500ms then auto-resume
- *     console.log('done');
- *   }
- *
- *   const fibers = new FiberManager();
- *   fibers.spawn('intro', myFiber);
- *   fibers.resume('intro');          // manual resume after a yield
  */
 
 class FiberHandle {
   constructor(id) {
     this.id = id;
     this._alive = false;
-    this._gen   = null;
-    this._resolve = null;   // resolves the current yield promise
+    this._gen = null;
+    this._resolve = null;
+    this._pendingResumes = 0;
   }
 
-  /** Yield from inside a fiber — suspends until resume() is called externally. */
   yield() {
-    return new Promise(res => { this._resolve = res; });
+    if (this._pendingResumes > 0) {
+      this._pendingResumes--;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => { this._resolve = resolve; });
   }
 
-  /** Wait for ms then auto-resume — no external resume needed. */
   wait(ms) {
-    return new Promise(res => setTimeout(res, ms));
+    return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
   }
 
   get alive() { return this._alive; }
 }
 
 export class FiberManager {
-  #fibers = new Map();   // id → FiberHandle
+  #fibers = new Map();
 
-  /**
-   * Spawn a fiber. If a fiber with the same id exists it is replaced.
-   * @param {string}            id
-   * @param {AsyncGeneratorFunction} generatorFn   (handle: FiberHandle) => AsyncGenerator
-   */
   spawn(id, generatorFn) {
+    if (typeof id !== 'string' || !id.trim()) throw new TypeError('Fiber id must be a non-empty string');
+    if (typeof generatorFn !== 'function') throw new TypeError('Fiber generator must be a function');
+
     this.kill(id);
     const handle = new FiberHandle(id);
     handle._alive = true;
-    handle._gen   = generatorFn(handle);
+    handle._gen = generatorFn(handle);
+    if (!handle._gen || typeof handle._gen.next !== 'function') {
+      handle._alive = false;
+      throw new TypeError('Fiber generatorFn must return an async generator');
+    }
     this.#fibers.set(id, handle);
-    // Run to first yield point automatically
-    this.#step(handle);
+    void this.#step(handle);
     return handle;
   }
 
-  /** Resume a suspended fiber (resolves its current yield()). */
   resume(id) {
-    const h = this.#fibers.get(id);
-    if (!h || !h._alive) return;
-    if (h._resolve) {
-      const res = h._resolve;
-      h._resolve = null;
-      res();
+    const handle = this.#fibers.get(id);
+    if (!handle || !handle._alive) return false;
+    if (handle._resolve) {
+      const resolve = handle._resolve;
+      handle._resolve = null;
+      resolve();
+    } else {
+      handle._pendingResumes++;
     }
+    return true;
   }
 
-  /** Kill a fiber — it stops at its next yield point. */
   kill(id) {
-    const h = this.#fibers.get(id);
-    if (!h) return;
-    h._alive = false;
-    if (h._resolve) { h._resolve(); h._resolve = null; }
-    if (h._gen?.return) h._gen.return();
+    const handle = this.#fibers.get(id);
+    if (!handle) return false;
+    handle._alive = false;
+    if (handle._resolve) {
+      const resolve = handle._resolve;
+      handle._resolve = null;
+      resolve();
+    }
+    if (handle._gen?.return) {
+      try { void handle._gen.return(); } catch (_) {}
+    }
     this.#fibers.delete(id);
+    return true;
   }
 
   isAlive(id) { return this.#fibers.get(id)?._alive ?? false; }
-
   list() { return [...this.#fibers.keys()]; }
-
-  // ── internal ─────────────────────────────────────────────────
 
   async #step(handle) {
     try {
       while (handle._alive) {
         const { done } = await handle._gen.next();
         if (done) break;
-        // After each yield, wait for resume() to fire _resolve
-        // (already handled inside FiberHandle.yield())
       }
-    } catch (e) {
-      console.error(`[Fiber:${handle.id}]`, e);
+    } catch (error) {
+      console.error(`[Fiber:${handle.id}]`, error);
     } finally {
       handle._alive = false;
       this.#fibers.delete(handle.id);

@@ -1,88 +1,75 @@
 /**
  * RateLimit — sliding window rate limiter.
- *
- * Equivalent of macro:rate_limit/*
- *
- * Rules are registered with a key, max hits, and window duration.
- * check(key) returns true if the hit is allowed, false if denied.
- *
- * Supports:
- *   - global rules  (key: "global:eventName")
- *   - per-entity    (key: "player:eventName:entityId")
- *   - auto-template (register template "player:eventName", checked per entity)
  */
 
 export class RateLimit {
-  #rules = new Map();    // key → { maxHits, windowMs }
-  #hits  = new Map();    // key → number[]  (timestamps of allowed hits)
+  #rules = new Map();
+  #hits  = new Map();
 
-  // ── rule registration ─────────────────────────────────────────
-
-  /**
-   * Register a rate limit rule.
-   * @param {string} key        e.g. "global:my_event" or "player:shop"
-   * @param {number} maxHits    Max hits allowed in window
-   * @param {number} windowMs   Window duration in milliseconds
-   */
   config(key, maxHits, windowMs) {
-    this.#rules.set(key, { maxHits, windowMs });
+    if (typeof key !== 'string' || !key.trim()) throw new TypeError('Rate limit key must be a non-empty string');
+    const hits = Number(maxHits);
+    const window = Number(windowMs);
+    if (!Number.isFinite(hits) || hits < 1) throw new RangeError('maxHits must be a positive number');
+    if (!Number.isFinite(window) || window < 1) throw new RangeError('windowMs must be a positive number');
+    this.#rules.set(key, { maxHits: Math.floor(hits), windowMs: Math.floor(window) });
   }
 
   hasRule(key) { return this.#rules.has(key); }
 
-  // ── check / consume ───────────────────────────────────────────
-
-  /**
-   * Check and consume one hit.
-   * @param {string} key   Full key (may be per-entity: "player:shop:alice")
-   * @returns {boolean}    true = ALLOWED, false = DENIED
-   */
   check(key) {
     const rule = this.#resolveRule(key);
-    if (!rule) return true;   // fail-open if no rule
+    if (!rule) return true;
 
-    const now  = Date.now();
+    const now = Date.now();
     const hits = this.#getHits(key);
-
-    // Prune old hits outside the window
     const window = rule.windowMs;
-    while (hits.length > 0 && now - hits[0] > window) hits.shift();
 
-    if (hits.length >= rule.maxHits) return false;   // DENIED
+    while (hits.length > 0 && now - hits[0] > window) hits.shift();
+    if (hits.length >= rule.maxHits) return false;
 
     hits.push(now);
-    return true;   // ALLOWED
+    return true;
   }
 
-  /**
-   * Check without consuming (peek).
-   */
   peek(key) {
     const rule = this.#resolveRule(key);
     if (!rule) return true;
-    const now  = Date.now();
-    const hits = this.#getHits(key).filter(t => now - t <= rule.windowMs);
+    const now = Date.now();
+    const hits = this.#getHits(key).filter((t) => now - t <= rule.windowMs);
     return hits.length < rule.maxHits;
   }
 
-  /** Reset hit history for a key. */
+  remaining(key) {
+    const rule = this.#resolveRule(key);
+    if (!rule) return Infinity;
+    const hits = this.#getHits(key);
+    if (hits.length < rule.maxHits) return 0;
+    const now = Date.now();
+    return Math.max(0, rule.windowMs - (now - hits[0]));
+  }
+
   reset(key) { this.#hits.delete(key); }
 
-  // ── internal ─────────────────────────────────────────────────
+  cleanup() {
+    const now = Date.now();
+    for (const [key, hits] of this.#hits.entries()) {
+      const rule = this.#resolveRule(key);
+      if (!rule) continue;
+      const filtered = hits.filter((t) => now - t <= rule.windowMs);
+      if (filtered.length === 0) this.#hits.delete(key);
+      else this.#hits.set(key, filtered);
+    }
+  }
 
   #getHits(key) {
     if (!this.#hits.has(key)) this.#hits.set(key, []);
     return this.#hits.get(key);
   }
 
-  /**
-   * Resolve rule for key — supports per-entity keys by looking up template.
-   * "player:shop:alice" → checks "player:shop:alice" then "player:shop"
-   */
   #resolveRule(key) {
     if (this.#rules.has(key)) return this.#rules.get(key);
-    // Try template (drop last segment)
-    const parts = key.split(':');
+    const parts = String(key).split(':');
     if (parts.length >= 3) {
       const template = parts.slice(0, -1).join(':');
       if (this.#rules.has(template)) return this.#rules.get(template);

@@ -1,35 +1,29 @@
 /**
  * Config — global key-value config store with defaults.
- *
- * Equivalent of macro:config/*  (get/set/has/delete/reset/set_default/list)
  */
 
 export class Config {
-  #store    = new Map();
+  #store = new Map();
   #defaults = new Map();
-
-  // ── defaults ──────────────────────────────────────────────────
 
   setDefault(key, value) {
     this.#defaults.set(key, value);
     if (!this.#store.has(key)) this.#store.set(key, value);
+    return this;
   }
 
-  // ── CRUD ─────────────────────────────────────────────────────
-
-  set(key, value) { this.#store.set(key, value); }
-
-  get(key) { return this.#store.get(key); }
-
+  set(key, value) { this.#store.set(key, value); return this; }
+  get(key, defaultValue = undefined) { return this.#store.has(key) ? this.#store.get(key) : defaultValue; }
   has(key) { return this.#store.has(key); }
+  delete(key) { return this.#store.delete(key); }
 
-  delete(key) { this.#store.delete(key); }
-
-  /** Reset key to its default value (or delete if no default). */
   reset(key) {
     if (this.#defaults.has(key)) this.#store.set(key, this.#defaults.get(key));
     else this.#store.delete(key);
   }
 
-  list() { return [...this.#store.entries()].map(([k, v]) => ({ key: k, value: v })); }
+  clear() { this.#store.clear(); }
+  list() { return [...this.#store.entries()].map(([key, value]) => ({ key, value })); }
+  entries() { return [...this.#store.entries()]; }
+  merge(entries) { for (const [key, value] of entries) this.set(key, value); return this; }
 }

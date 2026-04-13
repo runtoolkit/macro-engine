@@ -1,12 +1,5 @@
 /**
  * TickLoop — tick pipeline with channel support.
- *
- * Equivalent of macro:tick / macro:tick/channel/*
- *
- * Channels are named sub-loops with configurable:
- *   - rate    : fire every N ticks
- *   - offset  : start offset within the rate window
- *   - condition : () => bool — channel skips tick if false
  */
 
 export class TickLoop {
@@ -16,24 +9,23 @@ export class TickLoop {
   #intervalId = null;
   #msPerTick;
 
-  /**
-   * @param {number} msPerTick  Milliseconds per tick (default 50 = 20 TPS)
-   */
   constructor(msPerTick = 50) {
-    this.#msPerTick = msPerTick;
+    const value = Number(msPerTick);
+    if (!Number.isFinite(value) || value <= 0) throw new RangeError('msPerTick must be a positive number');
+    this.#msPerTick = value;
   }
 
-  // ── lifecycle ────────────────────────────────────────────────
-
   start() {
-    if (this.#intervalId !== null) return;
+    if (this.#intervalId !== null) return false;
     this.#intervalId = setInterval(() => this.#tick(), this.#msPerTick);
+    return true;
   }
 
   stop() {
-    if (this.#intervalId === null) return;
+    if (this.#intervalId === null) return false;
     clearInterval(this.#intervalId);
     this.#intervalId = null;
+    return true;
   }
 
   pause() { this.#paused = true; }
@@ -41,29 +33,24 @@ export class TickLoop {
   get paused() { return this.#paused; }
   get tickCount() { return this.#tickCtr; }
 
-  // ── channel API ──────────────────────────────────────────────
-
-  /**
-   * Register a tick channel.
-   * @param {string}   name
-   * @param {Function} fn          Called each time channel fires
-   * @param {object}   [opts]
-   * @param {number}   [opts.rate=1]
-   * @param {number}   [opts.offset=0]
-   * @param {Function} [opts.condition]   () => bool
-   */
   register(name, fn, { rate = 1, offset = 0, condition = null } = {}) {
-    this.#channels.set(name, { rate, offset, condition, enabled: true, fn });
+    if (typeof name !== 'string' || !name.trim()) throw new TypeError('Channel name must be a non-empty string');
+    if (typeof fn !== 'function') throw new TypeError('Tick channel fn must be a function');
+    const normalizedRate = Math.max(1, Math.floor(Number(rate) || 1));
+    const normalizedOffset = Math.floor(Number(offset) || 0);
+    if (condition !== null && typeof condition !== 'function') throw new TypeError('condition must be a function or null');
+    this.#channels.set(name, { rate: normalizedRate, offset: normalizedOffset, condition, enabled: true, fn });
   }
 
-  unregister(name) { this.#channels.delete(name); }
-
+  unregister(name) { return this.#channels.delete(name); }
   enable(name)  { this.#ch(name).enabled = true; }
   disable(name) { this.#ch(name).enabled = false; }
-
-  setRate(name, rate)           { this.#ch(name).rate = rate; }
-  setOffset(name, offset)       { this.#ch(name).offset = offset; }
-  setCondition(name, condition) { this.#ch(name).condition = condition; }
+  setRate(name, rate) { this.#ch(name).rate = Math.max(1, Math.floor(Number(rate) || 1)); }
+  setOffset(name, offset) { this.#ch(name).offset = Math.floor(Number(offset) || 0); }
+  setCondition(name, condition) {
+    if (condition !== null && typeof condition !== 'function') throw new TypeError('condition must be a function or null');
+    this.#ch(name).condition = condition;
+  }
 
   list() {
     return [...this.#channels.entries()].map(([name, ch]) => ({
@@ -74,17 +61,26 @@ export class TickLoop {
     }));
   }
 
-  // ── internal ─────────────────────────────────────────────────
+  step() {
+    return this.#tick();
+  }
 
   #tick() {
-    if (this.#paused) return;
+    if (this.#paused) return 0;
     this.#tickCtr++;
+    let fired = 0;
     for (const [, ch] of this.#channels) {
       if (!ch.enabled) continue;
       if ((this.#tickCtr + ch.offset) % ch.rate !== 0) continue;
       if (ch.condition && !ch.condition()) continue;
-      try { ch.fn(this.#tickCtr); } catch (e) { console.error('[TickLoop]', e); }
+      try {
+        ch.fn(this.#tickCtr);
+        fired++;
+      } catch (error) {
+        console.error('[TickLoop]', error);
+      }
     }
+    return fired;
   }
 
   #ch(name) {

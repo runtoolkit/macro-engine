@@ -52,9 +52,11 @@ engine.start();
 | `queue.js` | `Queue` | `macro:queue/*` |
 | `fiber.js` | `FiberManager` | `macro:lib/fiber/*` |
 | `batch.js` | `Batch` | `macro:lib/batch/*` |
-| `state.js` | `State` | `macro:state/*`, `macro:flag/*`, player vars |
+| `state.js` | `State` | `macro:state/*`, player vars |
+| `flag.js` | `FlagStore`, `Flag` | boolean flags |
 | `config.js` | `Config` | `macro:config/*` |
 | `rate-limit.js` | `RateLimit` | `macro:rate_limit/*` |
+| `command.js` | `CommandSystem`, `CommandRegistry` | single + multi command execution |
 | `log.js` | `Logger`, `LogLevel` | `macro:log/*` |
 | `math.js` | named exports | `macro:math/*` |
 | `string.js` | named exports | `macro:lib/string/*`, `macro:string/*` |
@@ -273,3 +275,21 @@ str.replace('hello world', 'world', 'JS'); // "hello JS"
 ## License
 
 MIT
+
+---
+
+## CommandSystem
+
+```js
+import { CommandSystem } from './src/command.js';
+
+const commands = new CommandSystem();
+
+commands.register('echo', async ({ args }) => args.join(' '));
+commands.register('sum', ({ args }) => args.map(Number).reduce((a, b) => a + b, 0));
+
+await commands.run('echo hello world');
+await commands.runMany(['echo first', 'echo second'], {}, { mode: 'series' });
+```
+
+The command layer stays data-driven: strings are parsed, registered handlers run, and nothing is sent to eval or the shell.
